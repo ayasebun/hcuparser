@@ -1,0 +1,463 @@
+#!/bin/bash
+##########################################
+# This is no longer private, I guess.
+##########################################
+
+#colors in a manner that would upset my precious redbeard mentor
+normal=$(tput sgr0)
+blue=$(tput setaf 153)
+red=$(tput setaf 1)
+green=$(tput setaf 2)
+yellow=$(tput setaf 3)
+
+#Of note if there's any color in here that seems awful to you then just change it. Not everyone's terminal is the same, and some hethens use white backgrounds on their terminals.
+
+##### #### ## # === == = -- - [ Script Handling ] - -- = == === # ## #### #####
+
+bailout(){
+
+    printf "${red} INTERRUPT CALLED. TERMINATING SCRIPT.${normal}\n\n"
+    kill -9 $pid
+    exit
+
+}
+
+##### #### ## # === == = -- - [ Operating System ] - -- = == === # ## #### #####
+
+osType(){
+
+    printf "\n${green}Operating System: ${normal}"
+
+    if grep --quiet systeminfo OS/OSVersion.txt; then
+        printf "${green}$(grep -oP "(?<=OS\sName\:\s{19})Microsoft.+" OS/OSVersion.txt)${normal}\n\n"
+        opSys="Windows"
+    elif grep --quiet "GNU/Linux" OS/OSVersion.txt; then
+        printf "${blue}$(egrep "GNU/Linux" OS/OSVersion.txt)${normal}\n\n"
+        opSys="Unix"
+    elif grep --quiet "AIX" OS/OSVersion.txt; then
+        printf "${yellow}$(grep "AIX" OS/OSVersion.txt)${normal}\n\n"
+        opSys="AIX"
+    fi
+}
+
+winSysInfo(){
+    #Grab Memory Size for Windows
+    if [[ -f OS/Systeminfo.txt  ]]; then
+        memParse=$(grep "Memory" OS/Systeminfo.txt)
+
+    fi
+    #    printf "${green}Memomry Info:\n---------------\n$(grep "Memory" OS/Systeminfo.txt)\n${normal}"
+
+    #Figure out the disk stuff later
+}
+
+unixSysInfo(){
+    #nproc and memory info
+    if [[ -f OS/Performance/iostat.txt ]]; then
+        cpuParse=$(grep -oP "\d(?=\sCPU)" OS/Performance/iostat.txt)
+    elif [[ -f OS/Hardware/HardwareConfig.txt ]]; then
+        cpuParse=$(grep -c ^processor OS/Hardware/HardwareConfig.txt)
+    fi
+
+    printf "${yellow}CPUs: ${cpuParse}\nMemory Info:\n---------------\n${normal}$(grep "Mem[TAF]" OS/Hardware/HardwareConfig.txt)${normal}\n\n"
+
+    #Disk Space Stuff
+    if grep --quiet "df -Tah" OS/FileSystem.txt; then
+        awkOut="$(awk '/%/{if ($6 > 80) print}' OS/FileSystem.txt)"
+        printf "${blue}Mounts over ${red}80%%${blue} Disk Usage. If nothing below this line then you're gucci:\n---------------\n${normal}"
+        echo "${awkOut}" && echo
+    fi
+}
+
+aixSysInfo(){
+    #nproc and memory info
+    printf "$(egrep "Processors|Memory Size" OS/Hardware/HardwareConfig.txt)\n\n"
+
+    #Disk Space Stuff if concerning
+    if grep --quiet "df -gv" OS/FileSystem.txt;then
+        awkOut="$(awk '/%/{if ($5 > 80) print}' OS/FileSystem.txt)${normal}"
+        printf "${blue}Mounts over ${red}80%%${blue} Disk Usage. If nothing below this line then you're gucci:\n\n---------------\n${normal}"
+        echo "${awkOut}" && echo
+    fi
+}
+
+#Getting Ulimit Info
+ulimitInfo(){
+    #Grab ulimit based on the OS type because they're formatted differently
+    case $opSys in
+        Windows)
+            ulimitOut=$(egrep -v "^($|\s|-|#|Set|Microsoft|Copyright|cscript)" OS/Ulimit.txt)
+            ;;
+        Unix)
+            ulimitOut=$(egrep -v "^($|\s|-|#|bash)|bin\/ulimit" OS/Ulimit.txt)
+            ;;
+        AIX)
+            ulimitOut=$(egrep -v "^($|\s|-|#|bash)|bin\/ulimit" OS/Ulimit.txt)
+            ;;
+    esac
+
+    #If the ulimitOut value that was stored is empty then don't print anything
+    if [[ -z $ulimitOut ]]; then
+        return
+    else
+        printf "\n${blue}Ulimits:\n---------------\n$ulimitOut\n${normal}"
+    fi
+
+    printf "${blue}---------------${normal}\n\n"
+
+}
+
+#Calling things that grab System Information
+systemInfo(){
+    #Grab information based on OS. $opSys comes from the osType() function
+    case $opSys in
+        Windows)
+            #Do Windows
+            winSysInfo
+            ;;
+        Unix)
+            #Do Unix
+            unixSysInfo
+            ;;
+        AIX)
+            #Do AIX
+            aixSysInfo
+    esac
+}
+
+javaMemReport(){
+    #Only pull this if the report/java_memory.csv file exists.
+    if [ -f report/java_memory.csv ]; then
+        #printf "${yellow}High Java Memory Usage found (Over 75%%)${normal}\n---------------\n"
+        #Keeping this simple for temporary, though later, add a nicer print statement https://www.gnu.org/software/gawk/manual/html_node/Print-Examples.html
+        muhjavaoom=$(awk -F"," '{if ($2 > $4*.75) print substr($1,1,4) ":" substr($1,5,2) "/" substr($1,7,2) " @ " substr($1,9,2) ":" substr($1,11,2) " " $2 "/" $4 "\tCE PID: " $5 }' report/java_memory.csv)
+
+        if [ -z "$muhjavaoom" ]; then
+            return
+        else
+            printf "${yellow}High Java Memory Usage found from CE (Over 75%%). Only printing the last few. Please review in detail if needed.${normal}\n---------------\n"
+            awk -F"," 'BEGIN{ print "Date\t\t\tUsed/Max\tCE PID" } {if ($2 > $4*.75) print substr($1,1,4) ":" substr($1,5,2) "/" substr($1,7,2) " @ " substr($1,9,2) ":" substr($1,11,2) "\t" $2 "/" $4 "\t" $5 }' report/java_memory.csv | tail && echo
+        fi
+    fi
+}
+
+#Call everything that would grab System Info. Add to this as the script becomes more and more nauseating.
+sysProbe(){
+    #Grab OS Inforamtion first
+    osType && systemInfo && ulimitInfo
+
+    #Control-M installed-versions.txt
+    instCheck
+
+    #Do the funny memory report from the report dir
+    javaMemReport
+
+}
+
+##########################################################################
+#   Everything below this secion is specific to distributed component.   #
+##########################################################################
+
+##### #### ## # === == = -- - [ Enterprise Manager ] - -- = == === # ## #### #####
+
+#Checking for UseSerialGC KA: 000372598, recommended on Windows.
+
+serialGC(){
+    #If OS isn't Windows then get out
+    if [ $opSys == "Windows"  ]; then
+        #If UseSerialGC is found in everything except for Services Health Monitor then ignore.
+        if grep -R --exclude=services-health-monitor.yml --quiet "XX:+UseSerialGC" EM/Services/context; then
+            return
+        #Otherwise, have the user check if there's any CPU concerns pertaining to MicroSerivces
+        else
+            printf "Windows Environment. Do you have CPU usage issues? Check to see if you should apply ${blue}KA 000372598\n${normal}"
+        fi
+    fi
+}
+
+badCert(){
+    #This message will occur on EM, observed for Linux
+
+    if [[ $opSys != "Unix" ]];then
+        return
+    fi
+
+    if grep -R --quiet "The certificate verification value.*is not recognised" EM/Log/WebLog; then
+        printf "${red}[WARNING] Potential SSL Certificate Exception Found. ${blue}Please have customer check validity of the certificate, as well as the path within the server.xml file.${normal}\nPath: "
+        grep -RhoP "(?<=The\scertificate\sverification\svalue\s\[).*(?=\]\sis\snot\srecognised)" EM/Log/WebLog | tail -n1 ; echo
+        printf "${blue}Please review whether or not these parameters need changes:${normal}\n"
+        if grep --quiet "keystoreType" EM/EMWEB/server.xml; then
+            grep -oP "(?<=\s)keystoreType=\".*\"(?=$)" EM/EMWEB/server.xml
+        else
+            printf "${red}[WARNING] keystoreType is not defined. Please verify that it exists and matches the certificate extension.${normal}\n"
+        fi
+
+        grep -oP "(?<=\s)(clientAuth=\"\/|keystoreFile=\").*" EM/EMWEB/server.xml
+        printf "${yellow}[000251633] If the parameters set within EM/EMWEB/server.xml look suspect, then you can create a new SSL connector.${normal}\n"
+    fi
+    echo
+}
+
+##### #### ## # === == = -- - [ Server ] - -- = == === # ## #### #####
+
+#Checking for "Unable to Fork" events when connecting to database
+srvDbForkCheck(){
+    #db/ dir doesn't always come up
+    if [[ -d db ]]; then
+
+        #If you have more than one hit for "could not fork". Also maybe 000295115
+        if [[ $(grep -Rc "could not fork" db/ | awk -F ":" '{s+=$2} END {print s}') != '0' ]] ; then
+            printf "\n${red}Check for DB 'Unable to Fork' Events.\n---------------${normal}\n" && grep -Rc "could not fork" db/ | awk -F ":" '{if ($2 > 0) print}'
+        #Otherwise, bail
+        elif [[ $(grep -Rc "could not fork" db/ | awk -F ":" '{s+=$2} END {print s}') = '0'  ]]; then
+            return
+        fi
+
+    fi
+}
+
+srvAgentTimeout(){
+    #Checking for timeouts within CE Logs. This was only observed within Linux so it might error on anything else. 01401707
+    if [[ $opSys != "Unix" ]];then
+        return
+    fi
+
+    if [[ -d LOG_INFO/proclog* ]]; then
+        if grep --quiet "Connect attempt.*timed out" LOG_INFO/proclog*/CE.*.log; then
+            printf "${red}[WARNING] Timeouts observed for Control-M/Agents. Printing top 5 offenders: ${normal}\n"
+            grep -hoP "(?<=12\sto\s).+(?=timed)" LOG_INFO/proclog*/CE.*.log | sort | uniq -c | sort -rn | head -n5 ; echo
+        fi
+    else
+        printf "${red}[WARNING] Ayo I can't find a LOG_INFO/proclog dir bro. Unless this was generated without it on purpose, then something's wrong.${normal}\n\n"
+    fi
+
+}
+
+srvMuhCEMem(){
+    if grep --quiet -R "java.lang.OutOfMemoryError: Java heap space" LOG_INFO/proclog/p_ctmce.stdout.* ; then
+        printf "${yellow}[NOTICE] CE May be running out of memory. Please confirm that the customer does not need a larger JVM_MAX_HEAP value for their CE process to complete.${normal}\n\n"
+    fi
+}
+
+##### #### ## # === == = -- - [ Agent ] - -- = == === # ## #### #####
+
+#Function to check for killed jobs in Agent
+agJobKilled(){
+    #Check for jobs marked as "Killed" in dailylog files
+    if grep -R --quiet "ORDERID.*KILLED" AG_LOG/dailylog; then
+        printf "${blue}Found ${red}KILLED${blue} jobs. Please assess whether or not we should care. Listing last 1-5:${normal}\n"
+        grep -R "ORDERID.*KILLED" AG_LOG/dailylog | tail -n5 && echo
+    fi
+}
+
+##### #### ## # === == = -- - [ Kafka Hate ] - -- = == === # ## #### #####
+
+kafkaConnRefuse(){
+    #Apache Kafka Down Message, Connection Refused on port
+    if grep --quiet -R "Kafka.*Errno 111\] Connection refused" EM/Log/Services/services-configuration-agent.log; then
+        printf "${red}[WARNING] Apache Zookeeper Unable to Bind to Port: ${yellow}$(grep "Kafka.*Errno 111\] Connection refused" EM/Log/Services/services-configuration-agent.log | tail -1 | grep -oP "(?<=in\sport\s\:\s)\d+") ${red}Config Port: ${yellow}$(grep -oP "(?<=\:)\d+(?=\')" EM/Services/config/services.yml)${normal}\n"
+    fi
+}
+
+kafkaTokenCheck(){
+    #Tokens should match. In EM, the dir is called "Services", srv its called "services"
+
+    case $hcutype in
+        EM)
+            if [[ $(grep -hoP "(?<=password\=\").*(?=\")" ./EM/KAFKA/jaas_config/server_jaas.conf ./EM/Services/jaas_config/client_jaas.conf ./EM/KAFKA/jaas_config/zookeeper_jaas.conf | while read token ; do echo $token | md5sum ; done | uniq | wc -l) > 1  ]]; then
+                printf "${red}KAFKA TOKEN MISTMATCH${normal}"
+            fi
+            ;;
+        SRV)
+            if [[ $(grep -hoP "(?<=password\=\").*(?=\")" ./LOG_INFO/kafka/config/trogdor.conf ./LOG_INFO/kafka/kafka_data/jaas_config/server_jaas.conf ./LOG_INFO/kafka/kafka_data/jaas_config/zookeeper_jaas.conf ./LOG_INFO/services/jaas_config/client_jaas.conf | while read token ; do echo $token | md5sum ; done | uniq | wc -l) > 1  ]]; then
+                printf "${red}KAFKA TOKEN MISMATCH${normal}"
+
+            fi
+        esac
+}
+
+##### #### ## # === == = -- - [ General Stuff ] - -- = == === # ## #### #####
+
+#Parse Installed Versions
+instCheck(){
+    #Display the type of data collector that you have
+    printf "${blue}Installed Version of ${hcuType}:\n---------------${normal}\n\n"
+
+    head -n2 ${instFile} && for distributed in Agent Server Enterprise ; do grep $distributed ${instFile} | tail -n1 ; done
+
+    echo
+
+    if grep --quiet "Control-M Application Pack" ${instFile}; then
+        printf "${blue}Application Pack is Installed. Please review the following versions:\n---------------\n${normal}"
+
+        head -n2 ${instFile} && for appComp in Backup Databases Integrator AWS Azure Informatica ; do grep $appComp ${instFile} | tail -n1 ; done
+    fi
+
+    printf "${blue}---------------${normal}\n\n"
+}
+
+
+##### #### ## # === == = -- - [ Organizational ] - -- = == === # ## #### #####
+
+##########################################################################
+# This section is specifically to keep things organized to some degree.  #
+# The epxectation was that this script was to grow -- so as functions    #
+# got added, they would be appended to these functions for the sake of   #
+# clarity. That and they could be easily commented out if I didn't want  #
+# something adhoc.                                                       #
+##########################################################################
+
+#Checks for EM
+checkEMErrors(){
+    badCert
+    serialGC
+    kafkaConnRefuse
+}
+
+#Checks for Server
+checkSRVErrors(){
+    srvDbForkCheck
+    srvAgentTimeout
+    srvMuhCEMem
+}
+
+#Checks for Agent
+checkAGErrors(){
+    agJobKilled
+}
+
+##### #### ## # === == = -- - [ The GUUUUG Stuff ] - -- = == === # ## #### #####
+#Call everything that would grab System Info. Add to this as the script becomes more and more nauseating.
+touchStuff(){
+    sleep 3
+    sysProbe
+
+    case $hcuType in
+        EM)
+            checkEMErrors ;;
+        SRV)
+            checkSRVErrors ;;
+        AG)
+            checkAGErrors;;
+        *)
+            printf "${blue}ur mom${normal}\n\n"
+
+    esac
+}
+
+##########################################################################
+#   Isn't he cute. He's adorable. Say he's cute or else.                 #
+##########################################################################
+
+hamut(){
+
+hamut[0]="                                   ,//,"
+hamut[1]="                                  ,/####/***."
+hamut[2]="                                  .,********//,"
+hamut[3]=""
+hamut[4]="                           .,/########(/,........"
+hamut[5]="                        .*/#######################(*,,,,."
+hamut[6]="            ......*/((####(((############################*."
+hamut[7]="        ,/##############/     ,############################/*,,."
+hamut[8]="       ,################/     *##################################((/*."
+hamut[9]="       ,(##############################(     ,######################*."
+hamut[10]="         ....,*(#######################(     .#####################/."
+hamut[11]="                     .*/(##########################################/."
+hamut[12]="                        ,(##########################################/***."
+hamut[13]="                        ,(#################################################/,"
+hamut[14]="               .,,******/###################################################*."
+hamut[15]="              ,#############################################################/."
+hamut[16]="              .###############################################################/*"
+hamut[17]="                ,###############################################################"
+hamut[18]="                  .***##########################################################"
+hamut[19]="                            ......,*(###########################################"
+hamut[20]="                                        .#######################################"
+hamut[21]="                                          ,#####################################"
+hamut[22]="                                            ####################################"
+hamut[23]="                                             ###################################"
+hamut[24]="                                             (##################################"
+hamut[25]="                                              ##################################"
+hamut[26]="                                              (#################################"
+hamut[27]="                                               #################################"
+
+lbahad=0
+while [ $lbahad -le "99" ]
+do
+    for ((i=0; i < ${#hamut[@]}; i++))
+    do
+        #colornum=expr $RANDOM % 6
+        printf '\e[38;5;%dm%s\e[0m' "$((RANDOM%255+1))"  "${hamut[$i]}"
+        printf '\n'
+        sleep .01
+
+    done
+    let "lbahad+=1"
+done
+
+exit 1
+}
+
+
+#Trespassers will be prosecuted
+PARSED_ARGS=$(getopt -o :rh --long run,help -- "$@")
+VALID_ARGS=$?
+
+runNow=false
+getHamut=false
+
+eval set -- $PARSED_ARGS
+
+while :
+do
+    case "$1" in
+        -h | --help ) printf "\n${blue}You should know who to go to.${normal}\n\n" ; exit ;;
+        -r | --run ) runNow=true ; break ;;
+        * ) getHamut=true ; break ;;
+    esac
+done
+
+#Check Installed Versions path, this will tell you what product you're working with
+emInst="EM/installed-versions.txt"
+srvInst="CNF_INFO/versions/installed-versions.txt"
+agInst="AG_CNF/versions/installed-versions.txt"
+
+if [[ -f "$emInst" ]]; then
+    printf "\n${yellow}[Control-M/Enterprise Manager]${normal} Data Collector Found.\n\n"
+    hcuType="EM"
+    instFile="${emInst}"
+elif [[ -f "$srvInst" ]]; then
+    printf "\n${yellow}[Control-M/Server]${normal} Data Collector Found.\n\n"
+    hcuType="SRV"
+    instFile="${srvInst}"
+elif [[ -f "$agInst" ]]; then
+    printf "\n${yellow}[Control-M/Agent]${normal} Data Collector Found.\n\n"
+    hcuType="AG"
+    instFile="${agInst}"
+else
+    echo "Bro did you actually give me a data collector"
+fi
+
+#Putting SysInfo and Error check in touchStuff(), putting it in bg, and letting the spinner check on the pid. Loop will exit when the PID no longer exists.
+if [ $getHamut = "true" ]; then
+    sleep 2
+    hamut
+    exit
+
+elif [ $runNow = "true" ]; then
+    touchStuff &
+    pid=$!
+
+    trap bailout SIGINT SIGABRT
+
+    spin='-\|/'
+    s=0
+    #kill -0 here only checks if pid exists.
+    while kill -0 $pid 2>/dev/null
+    do
+        s=$(( (s+1) %4))
+        printf "\r${spin:$s:1}"
+        sleep .15
+        printf "\r \b\b"
+    done
+
+fi
