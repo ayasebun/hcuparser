@@ -239,6 +239,46 @@ srvMuhCEMem(){
     fi
 }
 
+CECheck(){
+
+    # Check for the existence of CE Memory Logs
+    if ls -U1A LOG_INFO/proclog/CE.*memory.log 1>/dev/null 2>&1 ;then
+
+        # Checking CE Logs for funny NTP Problems
+        NTPCheckOutput=$(for ceLog in $(ls -U1A LOG_INFO/proclog/CE.*memory.log) ; do echo -en "Log $ceLog: " ;  diff -y <(grep -oP "^\d{4}_\d{2}:\d{2}:\d{2}(?=\.\d{3})" $ceLog) <(grep -oP "^\d{4}_\d{2}:\d{2}:\d{2}(?=\.\d{3})" $ceLog | sort) | grep -c ">\|<" ;echo ; done | awk '{ if ($3 > 0) print $0 }')
+        if [[ -z $NTPCheckOutput ]]; then
+            return
+        else
+            printf "${mag}[NTP Check] Instances of funny time skips in CE Logs:${end}\n----------\n$NTPCheckOutput\n\n"
+        fi
+
+        # Check for Agent Tiemouts in CE Logs
+
+        if grep --quiet "Connect attempt.*timed out" LOG_INFO/proclog*/CE.*.log; then
+            printf "${red}[WARNING] Timeouts observed for Control-M/Agents. Printing top 5 offenders: ${normal}\n"
+            grep -hoP "(?<=12\sto\s).+(?=timed)" LOG_INFO/proclog*/CE.*.log | sort | uniq -c | sort -rn | head -n5 ; echo
+        fi
+    fi
+
+}
+
+redorted(){
+    # This function will keep things that parse the "report" dir.
+
+    if [ ! -d report ]; then
+        return
+    elif [ -f report/java_memory.csv ]; then
+        muhjavaoom=$(awk -F"," '{if ($2 > $4*.75) print substr($1,1,4) ":" substr($1,5,2) "/" substr($1,7,2) " @ " substr($1,9,2) ":" substr($1,11,2) " " $2 "/" $4 "\tCE PID: " $5 }' report/java_memory.csv)
+
+        if [ -z "$muhjavaoom" ]; then
+            return
+        else
+            printf "${yel}[High Java Memory] Usage found from CE (Over 75%%). Only printing the last few. Please review in detail if needed.${end}\n---------------\n"
+            awk -F"," 'BEGIN{ print "Date\t\t\tUsed/Max\tCE PID" } {if ($2 > $4*.75) print substr($1,1,4) ":" substr($1,5,2) "/" substr($1,7,2) " @ " substr($1,9,2) ":" substr($1,11,2) "\t" $2 "/" $4 "\t" $5 }' report/java_memory.csv | tail && echo
+        fi
+    fi
+}
+
 ##### #### ## # === == = -- - [ Agent ] - -- = == === # ## #### #####
 
 #Function to check for killed jobs in Agent
@@ -319,6 +359,8 @@ checkSRVErrors(){
     srvDbForkCheck
     srvAgentTimeout
     srvMuhCEMem
+    CECheck
+    redorted
 }
 
 #Checks for Agent
