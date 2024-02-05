@@ -22,3 +22,13 @@ This is no longer in use. I was not at that establishment for long. This was how
 Of note there is a long section with ASCII Art. That is intentional -- I was snooped on constantly and I really wanted to drive home the point of "stop testing my bash if you can't run a script yourself". This happened often.
 
 Thank you for listening to my rant. I will never update this again, but I do look at it occasionally because I did some very funny stuff in this script that brings a tear to my eye.
+
+### Of Note
+
+If there's something that you would like to rip from this script then there are some disclaimers that I would like to make
+
+- The loop that I made to print the ASCII Art caused my work PC to crash. Personal PC? No issue. Personal-VM-as-strong-as-a-Nokia-flip-phone? No issue. Just that one crashed for some reason.
+
+- The loop that was made to make the progress spinner did not work well on the work machine either, though I kept it in because the way that it would break my output made me laugh sometimes.
+
+Do with that what you will
