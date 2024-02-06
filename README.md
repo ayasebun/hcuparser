@@ -1,4 +1,8 @@
-### This script was made out of spite.
+### Usage
+
+This script must be executed with `--run` in order to successfully execute. Otherwise you'll receive rainbow ASCII art in your terminal buffer. The script's only intended purpose was to obtain information based on CTM-EM, CTM-S, CTM-A software with log information collected by a user. Generic information such as operating system, system specs, entire log directories.
+
+### A bit of history -- This script was made out of spite.
 
 Allow me to explain. I was tested constantly during my time here, and I really missed being in a terminal the entire time. My only hope was to live in my WSL terminal. As a result I'd show my work through various bits of `grep` and `awk` output. I then later learned that all of the testing that was done against me was for naught, as Notepad++ was the preferred... "log parser"... at this establishment.
 
@@ -22,6 +26,7 @@ This is no longer in use. I was not at that establishment for long. This was how
 Of note there is a long section with ASCII Art. That is intentional -- I was snooped on constantly and I really wanted to drive home the point of "stop testing my bash if you can't run a script yourself". This happened often.
 
 Thank you for listening to my rant. I will never update this again, but I do look at it occasionally because I did some very funny stuff in this script that brings a tear to my eye.
+
 
 ### Of Note
 

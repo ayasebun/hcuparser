@@ -128,7 +128,6 @@ systemInfo(){
 javaMemReport(){
     #Only pull this if the report/java_memory.csv file exists.
     if [ -f report/java_memory.csv ]; then
-        #printf "${yellow}High Java Memory Usage found (Over 75%%)${normal}\n---------------\n"
         #Keeping this simple for temporary, though later, add a nicer print statement https://www.gnu.org/software/gawk/manual/html_node/Print-Examples.html
         muhjavaoom=$(awk -F"," '{if ($2 > $4*.75) print substr($1,1,4) ":" substr($1,5,2) "/" substr($1,7,2) " @ " substr($1,9,2) ":" substr($1,11,2) " " $2 "/" $4 "\tCE PID: " $5 }' report/java_memory.csv)
 
@@ -160,7 +159,7 @@ sysProbe(){
 
 ##### #### ## # === == = -- - [ Enterprise Manager ] - -- = == === # ## #### #####
 
-#Checking for UseSerialGC KA: 000372598, recommended on Windows.
+#Checking for UseSerialGC KA: [REDACTED], recommended on Windows.
 
 serialGC(){
     #If OS isn't Windows then get out
@@ -205,7 +204,7 @@ srvDbForkCheck(){
     #db/ dir doesn't always come up
     if [[ -d db ]]; then
 
-        #If you have more than one hit for "could not fork". Also maybe 000295115
+        #If you have more than one hit for "could not fork". Also maybe [REDACTED]
         if [[ $(grep -Rc "could not fork" db/ | awk -F ":" '{s+=$2} END {print s}') != '0' ]] ; then
             printf "\n${red}Check for DB 'Unable to Fork' Events.\n---------------${normal}\n" && grep -Rc "could not fork" db/ | awk -F ":" '{if ($2 > 0) print}'
         #Otherwise, bail
@@ -217,7 +216,7 @@ srvDbForkCheck(){
 }
 
 srvAgentTimeout(){
-    #Checking for timeouts within CE Logs. This was only observed within Linux so it might error on anything else. 01401707
+    #Checking for timeouts within CE Logs. This was only observed within Linux so it might error on anything else. [REDACTED]
     if [[ $opSys != "Unix" ]];then
         return
     fi
@@ -427,7 +426,6 @@ while [ $lbahad -le "99" ]
 do
     for ((i=0; i < ${#hamut[@]}; i++))
     do
-        #colornum=expr $RANDOM % 6
         printf '\e[38;5;%dm%s\e[0m' "$((RANDOM%255+1))"  "${hamut[$i]}"
         printf '\n'
         sleep .01
